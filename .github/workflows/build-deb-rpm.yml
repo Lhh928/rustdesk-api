@@ -1,0 +1,38 @@
+name: Build deb rpm
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+      - name: install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl musl-dev musl-tools rpm ruby ruby-dev build-essential
+      - name: tidy
+        run: go mod tidy
+      - name: build apimain (linux amd64, musl static)
+        run: |
+          mkdir -p release/data release/runtime
+          cp -ar resources docs conf release/
+          GOOS=linux GOARCH=amd64 CC=musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o ./release/apimain ./cmd/apimain.go
+          ./release/apimain --help >/dev/null 2>&1 || true
+      - name: install fpm
+        run: sudo gem install fpm --no-document
+      - name: package deb
+        run: fpm -s dir -t deb -n rustdesk-api -v 1.0.1 -C release --prefix /opt/rustdesk-api --vendor Lhh928 -m "Lhh928 <77222647+Lhh928@users.noreply.github.com>" --url "https://github.com/Lhh928/rustdesk-api" --description "RustDesk API server (apimain) with login-options fix" --license MIT .
+      - name: package rpm
+        run: fpm -s dir -t rpm -n rustdesk-api -v 1.0.1 -C release --prefix /opt/rustdesk-api --vendor Lhh928 -m "Lhh928 <77222647+Lhh928@users.noreply.github.com>" --url "https://github.com/Lhh928/rustdesk-api" --description "RustDesk API server (apimain) with login-options fix" --license MIT .
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-api-deb-rpm
+          path: |
+            *.deb
+            *.rpm
